@@ -765,10 +765,10 @@ function buildGirl(){
   };
 }
 const GIRLS = buildGirl();
-const girlFrame = walking => (walking && !RM ? GIRLS.walk[Math.floor(girlStep * 8) % 4] : GIRLS.idle);
+const girlFrame = walking => (walking && !RM ? GIRLS.walk[Math.floor(girlStep * 6) % 4] : GIRLS.idle);
 const GSPR = {
   k: '#2A1830', h: '#3A2418', H: '#5E3B26', s: '#F1C27D', S: '#D9A066', e: '#1d1630', b: '#F28FA0', m: '#C0605A',
-  t: '#221C2B', T: '#2E2738', c: '#F2EEF7', g: '#E8B860', j: '#3E5A9A', J: '#2E4478', w: '#FFFFFF', W: '#C9C3E0'
+  t: '#221C2B', T: '#2E2738', c: '#F2EEF7', g: '#E8B860', j: '#3E5A9A', J: '#2E4478', w: '#D94F78', W: '#A83A5E'
 };
 function spriteSVG(rows, map){
   let r = '';
@@ -1476,6 +1476,12 @@ function update(dt){
     }
   }
   updateFinale(dt);
+  // footsteps: a soft step each time a foot lands in her walk cycle
+  const walkingNow = phase === 1 || (phase === 5 && girlX > carX + 30) || (fin === 2 && walkDir !== 0);
+  if (walkingNow){
+    const f = Math.floor(girlStep * 6) % 4;
+    if (f !== lastStepF){ lastStepF = f; if (f === 0 || f === 2) footstep(); }
+  } else lastStepF = -1;
   bubbleT = Math.max(0, bubbleT - dt);
   puffT += dt;
   if (engineOn && puffT > (v > 1 ? 0.14 : 0.4)){
@@ -1787,7 +1793,45 @@ window.addEventListener('keyup', e => {
 window.addEventListener('resize', resize);
 
 // ---------- the finale: get out, pull the lever, blackout, her name in the windows, fireworks, plane ----------
-let gasOn = false, brakeOn = false, reverseGear = false, reverseHeld = false, beepT = 0;
+let gasOn = false, brakeOn = false, reverseGear = false, reverseHeld = false, beepT = 0, lastStepF = -1, stepAlt = false;
+let stepBus = null;
+function getStepBus(){
+  // footsteps get their own channel: twice as loud as the other effects, with a limiter so they never crackle
+  if (!stepBus){
+    const g = AC.createGain(), comp = AC.createDynamicsCompressor();
+    g.gain.value = 0.44;
+    comp.threshold.value = -10; comp.ratio.value = 8; comp.attack.value = 0.002; comp.release.value = 0.08;
+    g.connect(comp); comp.connect(master);
+    stepBus = g;
+  }
+  return stepBus;
+}
+function footstep(){
+  // heavy boots on a sandy road: a deep "tu" as the heel lands, a dull solid "dak" as the sole comes down,
+  // and a gritty crunch of sand under the boot
+  if (!AC) return;
+  const t = AC.currentTime, bus = getStepBus();
+  stepAlt = !stepAlt;
+  const p = (stepAlt ? 1 : 0.9) * (0.96 + Math.random() * 0.08);
+  const knock = (when, f0, f1, dur, type, vol, lp) => {
+    const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
+    o.type = type; o.frequency.setValueAtTime(f0, when); o.frequency.exponentialRampToValueAtTime(f1, when + dur);
+    f.type = 'lowpass'; f.frequency.value = lp;
+    g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(vol, when + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    o.connect(f); f.connect(g); g.connect(bus); o.start(when); o.stop(when + dur + 0.02);
+  };
+  // "tu": the heavy heel
+  knock(t, 110 * p, 55 * p, 0.11, 'sine', 1.4, 600);
+  nz(t, 0.08, 'lowpass', 300, 1.1, { dest: bus });
+  // "dak": the boot sole slapping down, duller and weightier than a shoe
+  const d = t + 0.08;
+  knock(d, 260 * p, 140 * p, 0.07, 'triangle', 1.0, 1100);
+  nz(d, 0.08, 'bandpass', 750 * p, 2.2, { q: 1.8, dest: bus });
+  // sand: a short burst of tiny grains crunching under the boot
+  nz(d, 0.12, 'bandpass', 3200, 0.35, { q: 0.9, a: 0.01, dest: bus });
+  for (let i = 0; i < 9; i++)
+    nz(d + Math.random() * 0.11, 0.008 + Math.random() * 0.01, 'bandpass', 2400 + Math.random() * 3200, 0.5, { q: 1.2, dest: bus });
+}
 let fin = 0, finT = 0, finGX = 0, finFace = 1, walkDir = 0, pulling = false, leverPull = 0, darkA = 0, ratchetB = 0;
 let endSignX = 0, leverX = 0, apWX = 0, apCache = null, showCity = null, litN = 0, spellT = 0, fireworks = [], roadConf = [];
 let fwT = 0, lampsBackT = 0, idleT = 0, finTimers = [], fin5Done = false, plane = null, bannerCv = null;
@@ -1812,7 +1856,7 @@ function nz(t, dur, ftype, freq, vol, o = {}){
   src.connect(f); f.connect(g);
   let out = g;
   if (o.pan != null && AC.createStereoPanner){ const pn = AC.createStereoPanner(); pn.pan.value = o.pan; g.connect(pn); out = pn; }
-  out.connect(sfxGain); src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.05);
+  out.connect(o.dest || sfxGain); src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.05);
 }
 const now = () => (audio() ? AC.currentTime : 0);
 const sfx = {
