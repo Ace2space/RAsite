@@ -498,23 +498,25 @@ const CONFIG = {
     night: "Why are you awake, Radhika?"
   },
   // The story, in order. Text boards use `text`; photo boards use `photo` (+ optional `caption`).
+  // square: true  -> square board, gently cropped around `focus` ([x, y] from 0 to 1; 0.35 = upper third, where faces usually are)
+  //                  `zoom` above 1 zooms in a little more and trims more background.
   // All photos live in a folder called "Photos" next to index.html.
   billboards: [
     { text: "Welcome aboard, Audi! Seatbelt on." },
     { text: "Tonight\u2019s route: a short tour of you." },
     { text: "Where it all began" },
-    { photo: "Photos/childhood.png", caption: "Small human. Big attitude. Some things never change." },
+    { photo: "Photos/childhood.png", caption: "Small human. Big attitude. Some things never change.", square: true, focus: [0.5, 0.38], zoom: 1.05 },
     { text: "College mil gaya. Ab toh maje hi maje." },
     { text: "From getting shy to pose..." },
     { photo: "Photos/shy.jpg" },
     { text: "...to owning the photo" },
-    { photo: "Photos/confident.jpg" },
+    { photo: "Photos/confident.jpg", square: true, focus: [0.42, 0.53], zoom: 1.3 },
     { text: "From: Fest aagye oyee, maje karenge" },
     { photo: "Photos/fest.jpg" },
     { text: "To: Ab padhna padega yaar" },
     { photo: "Photos/studying.jpg" },
     { text: "From: Abe job bhi to leni thi" },
-    { photo: "Photos/placement.jpg" },
+    { photo: "Photos/placement.jpg", square: true, focus: [0.5, 0.3], zoom: 1 },
     { text: "To: Lag gayi job. Gajab.", confetti: true },
     { text: "Ab kya bacha? Ohh, farewell." },
     { photo: "Photos/farewell-us.jpg" },
@@ -983,6 +985,11 @@ function resize(){
         const ar = im.naturalWidth / im.naturalHeight;
         const capFor = ww => { if (!b.caption) return 0; const f = fit(b.caption, ww - 8, 26, [5, 4]); return f.lines.length * f.lh + 4; };
         const maxH = groundY - POST - 14;                                    // keep the board under the sky line
+        if (b.square){                                                       // square board, photo cropped to fill it
+          const cap = capFor(76), ph = Math.max(48, Math.min(76, maxH - 6 - cap));
+          w = Math.round(ph) + 6; h = Math.round(ph) + 6 + cap;
+          Object.assign(b, { x: bxCursor, w, h }); bxCursor += w + 46; return b;
+        }
         let ph = ar < 1 ? 82 : 64, cap = capFor(Math.max(70, Math.round(ph * ar) + 6));   // tall photos get a taller board
         ph = Math.min(ph, maxH - 6 - cap);
         w = Math.round(ph * ar) + 6;
@@ -1088,7 +1095,15 @@ function drawBoard(b){
     let f = null, capH = 0;
     if (b.caption){ f = fit(b.caption, w - 8, 26, [5, 4]); capH = f.lines.length * f.lh + 4; }
     const dw = w - 6, dh = h - 6 - capH;
-    if (b.img && b.img.complete && b.img.naturalWidth){
+    if (b.square && b.img && b.img.complete && b.img.naturalWidth){
+      // fill the square, trimming a little around her (focus + zoom from CONFIG)
+      const nw = b.img.naturalWidth, nh = b.img.naturalHeight, z = b.zoom || 1, [fx, fy] = b.focus || [0.5, 0.35];
+      const sc = Math.max(dw / nw, dh / nh) * z, sw = dw / sc, sh = dh / sc;
+      const sx0 = Math.max(0, Math.min(nw - sw, fx * nw - sw / 2)), sy0 = Math.max(0, Math.min(nh - sh, fy * nh - sh / 2));
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(b.img, sx0, sy0, sw, sh, sx + 3, top + 3, dw, dh);
+      ctx.imageSmoothingEnabled = false;
+    } else if (b.img && b.img.complete && b.img.naturalWidth){
       // the whole photo, scaled to fit (never cropped), centred in its frame
       const k = Math.min(dw / b.img.naturalWidth, dh / b.img.naturalHeight);
       const iw = b.img.naturalWidth * k, ih = b.img.naturalHeight * k;
