@@ -498,7 +498,7 @@ const CONFIG = {
     night: "Why are you awake, Radhika?"
   },
   // The story, in order. Text boards use `text`; photo boards use `photo` (+ optional `caption`).
-  // All photos live in a folder called "Audi Photos" next to index.html.
+  // All photos live in a folder called "Photos" next to index.html.
   billboards: [
     { text: "Welcome aboard, Audi! Seatbelt on." },
     { text: "Tonight\u2019s route: a short tour of you." },
@@ -786,7 +786,9 @@ function sprite(rows, x, y, map = SPR, flip = false){
 }
 
 // ---------- photos ----------
-CONFIG.billboards.forEach(b => { if (b.photo){ b.img = new Image(); b.img.src = b.photo; } });
+CONFIG.billboards.forEach(b => {
+  if (b.photo){ b.img = new Image(); b.img.onload = () => { if (W) resize(); }; b.img.src = b.photo; }   // re-layout once each photo's shape is known
+});
 
 // ---------- audio ----------
 let AC, master, musicGain, sfxGain, seq = null, currentTrack = null;
@@ -973,7 +975,24 @@ function resize(){
   const startX = W + 20;
   let bxCursor = startX;
   boards = CONFIG.billboards.map(b => {
-    const isPhoto = !!b.photo, w = isPhoto ? Math.min(124, W - 20) : bw, h = isPhoto ? 76 : 56;
+    let w = bw, h = 56;
+    if (b.photo){
+      w = Math.min(124, W - 20); h = 76;                                   // placeholder size until the photo loads
+      const im = b.img;
+      if (im && im.complete && im.naturalWidth){
+        const ar = im.naturalWidth / im.naturalHeight;
+        const capFor = ww => { if (!b.caption) return 0; const f = fit(b.caption, ww - 8, 26, [5, 4]); return f.lines.length * f.lh + 4; };
+        const maxH = groundY - POST - 14;                                    // keep the board under the sky line
+        let ph = ar < 1 ? 82 : 64, cap = capFor(Math.max(70, Math.round(ph * ar) + 6));   // tall photos get a taller board
+        ph = Math.min(ph, maxH - 6 - cap);
+        w = Math.round(ph * ar) + 6;
+        if (w > W - 20){ w = W - 20; ph = (w - 6) / ar; }                    // very wide photos: shrink to fit the screen
+        if (b.caption) w = Math.max(w, 70);                                  // room for the caption
+        w = Math.max(w, 44);
+        cap = capFor(w);
+        h = Math.round(ph) + 6 + cap;
+      }
+    }
     Object.assign(b, { x: bxCursor, w, h });
     bxCursor += w + 46;
     return b;
@@ -1030,10 +1049,13 @@ function drawClouds(time){
   }
 }
 
-function spotlights(sx, top, w, h, strength){
+function spotlights(sx, top, w, h, strength, noCone){
   for (const f of [0.28, 0.72]){
     const lx = Math.round(sx + w * f);
-    if (mode === 'night'){
+    if (mode === 'night' && noCone){                         // photo boards: just a warm glow at the lamp, nothing on the photo
+      ctx.fillStyle = 'rgba(255,226,122,0.28)';
+      ctx.fillRect(lx - 4, top - 8, 8, 6); ctx.fillRect(lx - 2, top - 9, 4, 8);
+    } else if (mode === 'night'){
       ctx.fillStyle = `rgba(255,226,122,${strength})`;
       for (let i = 0; i < h * 0.7; i++){
         const half = 2 + i * 0.35;
@@ -1067,11 +1089,11 @@ function drawBoard(b){
     if (b.caption){ f = fit(b.caption, w - 8, 26, [5, 4]); capH = f.lines.length * f.lh + 4; }
     const dw = w - 6, dh = h - 6 - capH;
     if (b.img && b.img.complete && b.img.naturalWidth){
-      const ir = b.img.naturalWidth / b.img.naturalHeight, dr = dw / dh;
-      let sw = b.img.naturalWidth, sh = b.img.naturalHeight, ox = 0, oy = 0;
-      if (ir > dr){ sw = sh * dr; ox = (b.img.naturalWidth - sw) / 2; } else { sh = sw / dr; oy = (b.img.naturalHeight - sh) / 2; }
+      // the whole photo, scaled to fit (never cropped), centred in its frame
+      const k = Math.min(dw / b.img.naturalWidth, dh / b.img.naturalHeight);
+      const iw = b.img.naturalWidth * k, ih = b.img.naturalHeight * k;
       ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(b.img, ox, oy, sw, sh, sx + 3, top + 3, dw, dh);
+      ctx.drawImage(b.img, sx + 3 + (dw - iw) / 2, top + 3 + (dh - ih) / 2, iw, ih);
       ctx.imageSmoothingEnabled = false;
     } else {
       // placeholder until the photo is added: a little pixel "landscape" frame
@@ -1098,7 +1120,7 @@ function drawBoard(b){
     }
   }
   heart(sx + w - 9, top + h - 7, C.rose);
-  spotlights(sx, top, w, h, 0.16);
+  spotlights(sx, top, w, h, 0.16, !!b.photo);
 }
 
 function drawQSign(time){
