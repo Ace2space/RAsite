@@ -519,7 +519,7 @@ const CONFIG = {
     { photo: "Photos/placement.jpg", square: true, focus: [0.5, 0.3], zoom: 1 },
     { text: "To: Lag gayi job. Gajab.", confetti: true },
     { text: "Ab kya bacha? Ohh, farewell." },
-    { photo: "Photos/farewell-us.jpg" },
+    { photo: "Photos/farewell-us.jpg", square: true, focus: [0.52, 0.48], zoom: 1.35 },
     { text: "Kya? Teri individual photo nahi hai mere paas farewell ki." },
     { text: "Waise farewell se yaad aaya..." },
     { photo: "Photos/leaving-room.jpg" },
@@ -1134,7 +1134,6 @@ function drawBoard(b){
       R(x, y, rnd() < 0.5 ? 2 : 1, 1, cols[i % 4]);
     }
   }
-  heart(sx + w - 9, top + h - 7, C.rose);
   spotlights(sx, top, w, h, 0.16, !!b.photo);
 }
 
